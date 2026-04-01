@@ -16,8 +16,10 @@ async function authMiddleware(req, res, next) {
     const user = await userModel.findById(decoded.userID);
 
     req.user = user;
+
     next();
   } catch (error) {
+    
     return res.status(401).json({
       message: "Unauthorized access, token is missing",
     });
