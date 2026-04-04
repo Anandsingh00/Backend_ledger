@@ -25,38 +25,32 @@ async function createTransactionController(req, res) {
 }
 
 async function createInitalFundsTransaction(req, res) {
- 
-    const { toAccount, amount, idempotencyKey } = req.body;
-
-    if (!toAccount || !amount || !idempotencyKey) {
-      return res.status(400).json({
-        message: "toAccount, amount and idempotencyKey are required",
-      });
-    }
-
-    const toUserAccount = await accountModel.findOne({
-      _id: toAccount,
+  const { toAccount, amount, idempotencyKey } = req.body;
+  //1.validate
+  if (!toAccount || !amount || !idempotencyKey) {
+    return res.status(400).json({
+      message: "toAccount, amount and idempotencyKey are required",
     });
+  }
 
-    if (!toUserAccount) {
-      return res.status(404).json({
-        message: "toAccount not found",
-      });
-    }
-
-    const fromUser = await accountModel.findOne({
-      user: req.user._id,
+  const toUserAccount = await accountModel.findOne({ _id: toAccount });
+  if (!toUserAccount) {
+    return res.status(404).json({
+      message: "toAccount Not found",
     });
+  }
 
-    if (!fromUser) {
-      return res.status(400).json({
-        message: "System user account not found",
-      });
-    }
+  const fromUser = await accountModel.findOne({ user: user.req._id });
+  if (!fromUser) {
+    return res.status(400).json({ message: "System user account not found" });
+  }
 
-    const session = await mongoose.startSession();
+  //2.start session
+  const session = await mongoose.startSession();
+
+  try {
     session.startTransaction();
-
+    // Create the transaction record
     const transaction = await transactionModel.create(
       [
         {
@@ -72,8 +66,8 @@ async function createInitalFundsTransaction(req, res) {
 
     const createdTransaction = transaction[0];
 
-    //Debit Ledger Entry for system account 
-    const debitLedgerEntry = await ledgerModel.create(
+    // Debit ledger entry
+    await ledgerModel.create(
       [
         {
           account: fromUser._id,
@@ -85,11 +79,11 @@ async function createInitalFundsTransaction(req, res) {
       { session },
     );
 
-    //Credit Ledger Entry for recipient account 
-    const creditLedgerEntry = await ledgerModel.create(
+    // Credit ledger entry
+    await ledgerModel.create(
       [
         {
-          account: toAccount,
+          acccount: toAccount,
           amount,
           transaction: createdTransaction._id,
           type: "CREDIT",
@@ -98,23 +92,32 @@ async function createInitalFundsTransaction(req, res) {
       { session },
     );
 
-   console.log(
-      `Ledger entries created 
-      Debit: ${debitLedgerEntry[0]._id}
-      Credit: ${creditLedgerEntry[0]._id}`
-    );
+    // Update status and save
+    createdTransaction.status = "COMPLETED";
+    await createdTransaction.save({ session });
 
-   createdTransaction.status = "COMPLETED";
-  await createdTransaction.save({ session });
-
+    //3.commit the changes
     await session.commitTransaction();
-    session.endSession();
 
     return res.status(201).json({
-      message: "Inital fund transaction completed successfully",
+      message: "Initial fund transaction completed successfully",
       transaction: transaction,
     });
+  } catch (error) {
+    //4.rollback:if anything fails in the try block
+    console.error("Transaction aborted due to error:", error);
+    await session.abortTransaction();
+
+    return res.status(500).json({
+      message: "Transaction failed and was rolled back",
+      error: error.message,
+    });
+  } finally {
+    //5. End the session
+    await session.endSession();
+  }
 }
+
 module.exports = {
   createTransactionController,
   createInitalFundsTransaction,
