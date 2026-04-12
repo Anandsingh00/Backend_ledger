@@ -24,4 +24,9 @@ router.get(
   accountController.getUserAccountsController,
 );
 
+/**
+ * * -GET /api/accounts/balance/:acccountId
+*/
+router.get("balance/:accountId",authMiddleware.authMiddleware,accountController.getAccountBalanceController)
+
 module.exports = router;

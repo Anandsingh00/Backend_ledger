@@ -20,10 +20,11 @@ const { default: mongoose, mongo } = require("mongoose");
  * */
 
 async function createTransactionController(req, res) {
-  //yet to be completed
   const { fromAccount, toAccount, amount, idempotencyKey } = req.body;
 
-  // Validate User Input
+  /**
+   * * -1. Validate request
+  */
   if (!fromAccount || !toAccount || !amount || !idempotencyKey) {
     return res.json(400).status({
       message: "fromAccount,toAccount,amount,idempotencyKey are required",
@@ -42,7 +43,7 @@ async function createTransactionController(req, res) {
 
   /**
    * 2. Validate idempotency key
-   */
+  */
   const isTransactionAlreadyExists = await accountModel.findOne({
     idempotencyKey: idempotencyKey,
   });
@@ -73,9 +74,10 @@ async function createTransactionController(req, res) {
       });
     }
   }
+
   /**
    * 3. Check account status
-   */
+  */
   if (
     toUserAccount.status !== "ACTIVE" ||
     fromUserAccount.status !== "ACTIVE"
@@ -87,7 +89,7 @@ async function createTransactionController(req, res) {
 
   /**
    * 4. Derive sender balance from ledger
-   */
+  */
   const balance = await fromUserAccount.getBalance();
   if (balance < amount) {
     return res.status(400).json({
@@ -97,7 +99,7 @@ async function createTransactionController(req, res) {
 
   /**
    * 5.Create transaction (PENDING)
-   */
+  */
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -114,7 +116,7 @@ async function createTransactionController(req, res) {
 
   /*
    * -6. Create DEBIT ledger entry
-   */
+  */
   const debitLedgerEntry = await mongoose.create(
     {
       account: fromAccount,
@@ -124,9 +126,10 @@ async function createTransactionController(req, res) {
     },
     { session },
   );
+
   /*
    * -7. Create CREDIT ledger entry
-   */
+  */
   const creditLedgerEntry = await mongoose.create(
     {
       account: toAccount,
@@ -136,20 +139,22 @@ async function createTransactionController(req, res) {
     },
     { session },
   );
+
   /**
    *  -8.Mark transaction as COMPLETED
-   */
+  */
   transaction.status = "COMPLETED";
   await transaction.save({ session });
+
   /*
    * -9. Commit mongodb session
-   */
+  */
   await session.commitTransaction();
   session.endSession();
 
   /**
    * * -10.Send transaction email to user
-   */
+  */
   await emailService.sendTransactionEmail(
     req.user.email,
     req.user.name,

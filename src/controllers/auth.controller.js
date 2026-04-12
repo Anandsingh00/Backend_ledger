@@ -36,7 +36,7 @@ async function userRegisterController(req, res) {
   //store the token inside user's cookie
   res.cookie("token", token);
 
-   res.status(201).json({
+  res.status(201).json({
     user: {
       _id: user._id,
       email: user.email,
@@ -45,9 +45,7 @@ async function userRegisterController(req, res) {
     token,
   });
 
-  await emailService.sendRegistrationEmail(email,name);
-
-  
+  await emailService.sendRegistrationEmail(email, name);
 }
 
 /**
@@ -68,7 +66,7 @@ async function userLoginController(req, res) {
 
   if (!isValidPassword) {
     return res.status(401).json({
-      message: "Email or password is INVALID",
+      message: "Incorrect Password,Please try again",
     });
   }
 
