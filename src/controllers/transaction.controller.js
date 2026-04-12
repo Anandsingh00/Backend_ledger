@@ -2,7 +2,7 @@ const transactionModel = require("../models/transaction.model");
 const ledgerModel = require("../models/ledger.model");
 const emailService = require("../services/email.service");
 const accountModel = require("../models/account.model");
-const { default: mongoose } = require("mongoose");
+const { default: mongoose, mongo } = require("mongoose");
 
 /**
  * * - Create a new transaction
@@ -72,25 +72,95 @@ async function createTransactionController(req, res) {
         message: "Transaction is reversed,Please retry",
       });
     }
-
-    /**
-     * 3. Check account status
-     */
-    if (
-      toUserAccount.status !== "ACTIVE" ||
-      fromUserAccount.status !== "ACTIVE"
-    ) {
-      return res.status(400).json({
-        message: "Both the to and from account must be active",
-      });
-    }
-
-/**
-     * 4. Derive sender balance from ledger
-*/
-
-
   }
+  /**
+   * 3. Check account status
+   */
+  if (
+    toUserAccount.status !== "ACTIVE" ||
+    fromUserAccount.status !== "ACTIVE"
+  ) {
+    return res.status(400).json({
+      message: "Both the to and from account must be active",
+    });
+  }
+
+  /**
+   * 4. Derive sender balance from ledger
+   */
+  const balance = await fromUserAccount.getBalance();
+  if (balance < amount) {
+    return res.status(400).json({
+      message: `Insufficient balance. Current balance is ${balance}. Requested amount is ${amount}`,
+    });
+  }
+
+  /**
+   * 5.Create transaction (PENDING)
+   */
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  const transaction = await transactionModel.create(
+    {
+      fromAccount,
+      toAccount,
+      amount,
+      idempotencyKey,
+      status: "PENDING",
+    },
+    { session },
+  );
+
+  /*
+   * -6. Create DEBIT ledger entry
+   */
+  const debitLedgerEntry = await mongoose.create(
+    {
+      account: fromAccount,
+      amount: amount,
+      transaction: transaction._id,
+      type: "DEBIT",
+    },
+    { session },
+  );
+  /*
+   * -7. Create CREDIT ledger entry
+   */
+  const creditLedgerEntry = await mongoose.create(
+    {
+      account: toAccount,
+      amount: amount,
+      transaction: transaction._id,
+      type: "CREDIT",
+    },
+    { session },
+  );
+  /**
+   *  -8.Mark transaction as COMPLETED
+   */
+  transaction.status = "COMPLETED";
+  await transaction.save({ session });
+  /*
+   * -9. Commit mongodb session
+   */
+  await session.commitTransaction();
+  session.endSession();
+
+  /**
+   * * -10.Send transaction email to user
+   */
+  await emailService.sendTransactionEmail(
+    req.user.email,
+    req.user.name,
+    amount,
+    toAccount,
+  );
+
+  return res.status(200).json({
+    message: "Transaction completed successfully",
+    transaction: transaction,
+  });
 }
 
 async function createInitalFundsTransaction(req, res) {
