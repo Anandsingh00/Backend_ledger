@@ -8,9 +8,20 @@ const accountController = require("../controllers/account.controller");
  * - Protected Route
  */
 router.post(
-  "/",
+  "/create",
   authMiddleware.authMiddleware,
   accountController.createAccountController,
+);
+
+/**
+ * -GET /api/acccounts
+ * -Get all accounts of the logged-in user
+ * -Protected Route
+ */
+router.get(
+  "/",
+  authMiddleware.authMiddleware,
+  accountController.getUserAccountsController,
 );
 
 module.exports = router;
