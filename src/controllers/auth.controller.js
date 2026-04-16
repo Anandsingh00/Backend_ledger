@@ -86,7 +86,20 @@ async function userLoginController(req, res) {
   });
 }
 
+async function userLogoutController(req, res) {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: false, // true if using HTTPS
+    sameSite: "lax",
+  });
+
+  return res.status(200).json({
+    message: "Logged out successfully",
+  });
+}
+
 module.exports = {
   userRegisterController,
   userLoginController,
+  userLogoutController,
 };
