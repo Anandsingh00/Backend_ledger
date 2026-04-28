@@ -27,7 +27,7 @@ async function userRegisterController(req, res) {
     password,
   });
 
-  // After successful signup , send a jwt token to the user which will contain- user_id,jwt-secret and expiry time
+  // After successful signup , send a jwt token to the user which will contain - user_id,jwt-secret and expiry time
 
   const token = jwt.sign({ userID: user._id }, process.env.JWT_SECRET, {
     expiresIn: "3d",
